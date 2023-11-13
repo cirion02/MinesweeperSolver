@@ -39,6 +39,8 @@ pub trait BoardIndexable {
     fn empty_and_mine_count(&self, next_to:&Vec<usize>) -> (Vec<usize>, usize);
 
     fn black_white_m_minecount(&self, next_to:&Vec<usize>) -> (Vec<usize>, Vec<usize>, usize);
+
+    fn black_white_split_minecount(&self, next_to:&Vec<usize>) -> (Vec<usize>, Vec<usize>, usize, usize);
 }
 
 pub struct Board {
@@ -159,6 +161,16 @@ impl BoardIndexable for Board {
                 MinesweeperCell::Empty => {if is_square_id_black(i, self.size) {black.push(i)} else {white.push(i)}; (black, white, mines)},
                 MinesweeperCell::Mine => (black, white, mines + if is_square_id_black(i, self.size) {1} else {2}),
                 _ => (black, white, mines)
+            }
+        })
+    }
+
+    fn black_white_split_minecount(&self, next_to:&Vec<usize>) -> (Vec<usize>, Vec<usize>, usize, usize) {
+        next_to.to_owned().into_iter().fold((Vec::new(),Vec::new(),0,0), |(mut black, mut white, black_mines, white_mines), i| {
+            match self[i] {
+                MinesweeperCell::Empty => {if is_square_id_black(i, self.size) {black.push(i)} else {white.push(i)}; (black, white, black_mines, white_mines)},
+                MinesweeperCell::Mine => (black, white, black_mines + if is_square_id_black(i, self.size) {1} else {0}, white_mines + if is_square_id_black(i, self.size) {0} else {1}, ),
+                _ => (black, white, black_mines, white_mines)
             }
         })
     }

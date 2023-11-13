@@ -1,18 +1,19 @@
-use crate::board::{Board, BoardIndexable, MinesweeperCell, NextToPolicy, cell_to_char};
+use crate::board::{Board, BoardIndexable, MinesweeperCell, NextToPolicy};
 use crate::algorithms::KnownSquares;
 
-use highs::{Sense, Model, HighsModelStatus, RowProblem};
+use highs::{Sense, HighsModelStatus, RowProblem};
 use std::fmt;
 use std::collections::{HashMap, HashSet};
 
 #[derive(Copy)]
 #[derive(Clone)]
-#[derive(PartialEq, Eq)]
+#[derive(PartialEq)]
 enum ConstraitType {
     Equality,
     Minimum,
     BlackWhiteEquality,
     OffByOne,
+    DifferenceOfColors(f64),
 }
 
 #[derive(Clone)]
@@ -20,8 +21,7 @@ struct Constraint {
     constrait_type : ConstraitType,
     value: usize,
     cells : Vec<usize>,
-    cells2 : Vec<usize>
-
+    cells2 : Vec<usize>,
 }
 
 #[derive(Clone)]
@@ -47,7 +47,8 @@ impl fmt::Display for ConstraitType {
             ConstraitType::Equality => write!(f, "=="),
             ConstraitType::Minimum => write!(f, ">="),
             ConstraitType::BlackWhiteEquality => write!(f, "M="),
-            ConstraitType::OffByOne => write!(f, "L=")
+            ConstraitType::OffByOne => write!(f, "L="),
+            ConstraitType::DifferenceOfColors(_) => write!(f, "N="),
         }
     }
 }
@@ -91,7 +92,7 @@ fn create_constraints_for_cell_v(id:usize, board:&Board) -> Vec<Constraint> {
     }
 }
 
-pub fn create_constraint_set_normal_mines(board:&Board) -> ConstraintSet{
+fn create_constraint_set_normal_mines(board:&Board) -> ConstraintSet{
     
     let (empty_cells, _) = board.empty_and_mine_count(&(0..board.size*board.size).collect());
 
@@ -108,7 +109,7 @@ pub fn create_constraint_set_normal_mines(board:&Board) -> ConstraintSet{
     }
 }
 
-pub fn create_constraint_set_minecount(board:&Board) -> ConstraintSet{
+fn create_constraint_set_minecount(board:&Board) -> ConstraintSet{
     let total_count:usize = match board.size{
         5 => 10,
         6 => 14,
@@ -169,7 +170,7 @@ fn create_constraints_for_cell_m(id:usize, board:&Board) -> Vec<Constraint> {
     }
 }
 
-pub fn create_constraint_set_multiple_mines(board:&Board) -> ConstraintSet{
+fn create_constraint_set_multiple_mines(board:&Board) -> ConstraintSet{
     
     let (empty_cells, _) = board.empty_and_mine_count(&(0..board.size*board.size).collect());
 
@@ -195,13 +196,16 @@ fn create_constraints_for_cell_l(id:usize, board:&Board) -> Vec<Constraint> {
             if x == 0 {
                 return vec![Constraint { constrait_type: ConstraitType::Equality, value: 1 - bombs, cells: empty, cells2: vec![] }]
             }
+            if bombs > x {
+                return vec![Constraint { constrait_type: ConstraitType::Equality, value: 0, cells: empty, cells2: vec![] }]
+            }
             return vec![Constraint { constrait_type: ConstraitType::OffByOne, value: x - bombs, cells: empty, cells2: vec![] }];
         },
         _ => return vec![]
     }
 }
 
-pub fn create_constraint_set_liar_mines(board:&Board) -> ConstraintSet{
+fn create_constraint_set_liar_mines(board:&Board) -> ConstraintSet{
     
     let (empty_cells, _) = board.empty_and_mine_count(&(0..board.size*board.size).collect());
 
@@ -211,6 +215,88 @@ pub fn create_constraint_set_liar_mines(board:&Board) -> ConstraintSet{
                 |mut vec, id| 
                 {
                     vec.extend(create_constraints_for_cell_l(id, board));
+                    vec
+                }),
+        boardsize: board.size,
+        cells:empty_cells
+    }
+}
+
+
+fn create_constraint_set_minecount_b(board:&Board) -> ConstraintSet{
+    let total_count:usize = match board.size{
+        5 => 10,
+        6 => 12,
+        7 => 21,
+        8 => 24,
+        _ => panic!("Bad board size")
+    };
+
+    let (empty_cells, mines_placed) = board.empty_and_mine_count(&(0..board.size*board.size).collect());
+
+    let mut constraints = vec![Constraint {constrait_type: ConstraitType::Equality, value: total_count-mines_placed, cells: empty_cells.clone(), cells2: vec![]}];
+
+    ConstraintSet {
+        constraints:constraints,
+        boardsize: board.size,
+        cells:empty_cells.clone()
+    }
+}
+
+fn create_b_added_constraint_set(board:&Board) -> ConstraintSet{
+    let (empty_cells, mines_placed) = board.empty_and_mine_count(&(0..board.size*board.size).collect());
+
+    let mines_per_row = match board.size {
+        5 => 2,
+        6 => 2,
+        7 => 3,
+        8 => 3,
+        _ => panic!("Bad board size")
+    };
+
+    let mut constraints = vec![];
+
+    for i in 0..board.size{
+        //Rows
+        let (empty_cells, mines_placed) = board.empty_and_mine_count(&(0..board.size).map(|x|x+i*board.size).collect());
+
+        constraints.push(Constraint { constrait_type: ConstraitType::Equality, value: mines_per_row - mines_placed, cells: empty_cells, cells2: vec![] });
+
+        //Columns
+        let (empty_cells, mines_placed) = board.empty_and_mine_count(&(0..board.size).map(|x|(x*board.size)+i).collect());
+
+        constraints.push(Constraint { constrait_type: ConstraitType::Equality, value: mines_per_row - mines_placed, cells: empty_cells, cells2: vec![] });
+    }
+
+    ConstraintSet {
+        constraints:constraints,
+        boardsize: board.size,
+        cells:empty_cells
+    } 
+}
+
+fn create_constraints_for_cell_n(id:usize, board:&Board) -> Vec<Constraint> {
+    match board[id] {
+        MinesweeperCell::Number(x) => {
+            let next_to = board.get_next_to(id, NextToPolicy::EightAround);
+            let (black, white, black_bombs, white_bomds) = board.black_white_split_minecount(&next_to);
+            if black.len() + white.len() == 0 { return vec![] };
+            return vec![Constraint { constrait_type: ConstraitType::DifferenceOfColors(black_bombs as f64-white_bomds as f64), value: x, cells: black, cells2: white }];
+        },
+        _ => return vec![]
+    }
+}
+
+fn create_constraint_set_negation_mines(board:&Board) -> ConstraintSet{
+    
+    let (empty_cells, _) = board.empty_and_mine_count(&(0..board.size*board.size).collect());
+
+    ConstraintSet {
+        constraints:
+            (0..board.size*board.size).fold(vec![], 
+                |mut vec, id| 
+                {
+                    vec.extend(create_constraints_for_cell_n(id, board));
                     vec
                 }),
         boardsize: board.size,
@@ -232,6 +318,14 @@ pub fn create_constraint_set_m(board:&Board) -> ConstraintSet {
 
 pub fn create_constraint_set_l(board:&Board) -> ConstraintSet {
     combine_constraint_sets(create_constraint_set_minecount(board), create_constraint_set_liar_mines(board))
+}
+
+pub fn create_constraint_set_b(board:&Board) -> ConstraintSet {
+    combine_constraint_sets(create_constraint_set_normal_mines(board), combine_constraint_sets(create_constraint_set_minecount_b(board), create_b_added_constraint_set(board)))
+}
+
+pub fn create_constraint_set_n(board:&Board) -> ConstraintSet {
+    combine_constraint_sets(create_constraint_set_minecount(board), create_constraint_set_negation_mines(board))
 }
 
 fn probe_cell(constraints:&ConstraintSet, probe_id:usize) -> ProbeResult{
@@ -266,13 +360,17 @@ fn probe_cell(constraints:&ConstraintSet, probe_id:usize) -> ProbeResult{
                 let liar_cell = pb.add_integer_column(0., 0..1);
                 let mut cells : Vec<(_, f64)> = constraint.cells.clone().into_iter().map(|id|(colums[*lookup.get(&id).unwrap()], 1.)).collect();
                 cells.push((liar_cell, 2.));
-                println!("{:?}", cells);
-                pb.add_row((value-1.0)..=(value-1.0), cells)
+                pb.add_row((value+1.0)..=(value+1.0), cells)
+            }
+            ConstraitType::DifferenceOfColors(black_bias) => {
+                let abs_cell = pb.add_integer_column(0., 0..1);
+                let mut cells : Vec<(_, f64)> = constraint.cells.clone().into_iter().map(|id|(colums[*lookup.get(&id).unwrap()], 1.)).collect();
+                cells.extend(constraint.cells2.clone().into_iter().map(|id|(colums[*lookup.get(&id).unwrap()], -1.)));
+                cells.push((abs_cell, value*2.0));
+                pb.add_row((value-black_bias)..=(value-black_bias), cells)
             }
         }
     }
-
-    println!("{:?}", pb);
 
     let max = pb.clone().optimise(Sense::Maximise).solve();
 
