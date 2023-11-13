@@ -10,8 +10,11 @@ pub enum MinesweeperCell {
     Mine
 }
 
-fn cell_to_char(cell:MinesweeperCell) -> char{
+pub fn cell_to_char(cell:MinesweeperCell) -> char{
     match cell {
+        MinesweeperCell::Number(10) => 'A',
+        MinesweeperCell::Number(11) => 'B',
+        MinesweeperCell::Number(12) => 'C',
         MinesweeperCell::Number(val) => from_digit(val.try_into().unwrap(), 36).unwrap(),
         MinesweeperCell::Empty => ' ',
         MinesweeperCell::Question => '?',
@@ -34,6 +37,8 @@ pub trait BoardIndexable {
     fn get_next_to_x(&self, index: usize) -> Vec<usize>;
 
     fn empty_and_mine_count(&self, next_to:&Vec<usize>) -> (Vec<usize>, usize);
+
+    fn black_white_m_minecount(&self, next_to:&Vec<usize>) -> (Vec<usize>, Vec<usize>, usize);
 }
 
 pub struct Board {
@@ -147,6 +152,30 @@ impl BoardIndexable for Board {
             }
         })
     }
+
+    fn black_white_m_minecount(&self, next_to:&Vec<usize>) -> (Vec<usize>, Vec<usize>, usize) {
+        next_to.to_owned().into_iter().fold((Vec::new(),Vec::new(),0), |(mut black, mut white, mines), i| {
+            match self[i] {
+                MinesweeperCell::Empty => {if is_square_id_black(i, self.size) {black.push(i)} else {white.push(i)}; (black, white, mines)},
+                MinesweeperCell::Mine => (black, white, mines + if is_square_id_black(i, self.size) {1} else {2}),
+                _ => (black, white, mines)
+            }
+        })
+    }
+}
+
+fn is_square_id_black(id:usize, size:usize) -> bool{
+    if size % 2 == 1 { return id % 2 == 0}
+
+    let mut y = 0;
+    let mut x = id;
+
+    while x >= size {
+        y += 1;
+        x -= size;
+    }
+
+    x % 2 == y % 2
 }
 
 impl Index<usize> for Board {
@@ -217,4 +246,10 @@ mod tests {
             }, "testing: {} val {:?}", i, board.get_next_to(i, NextToPolicy::XScape))
         }
     }
+}
+
+pub fn cells_left(board:&Board) -> usize{
+    let (empties, _) = board.empty_and_mine_count(&(0..board.size*board.size).collect());
+
+    empties.len()
 }

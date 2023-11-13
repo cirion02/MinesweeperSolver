@@ -18,11 +18,11 @@ pub fn get_whole_window() -> RgbaImage{
     RgbaImage::from_raw(buf.width, buf.height, buf.pixels).unwrap()
 }
 
-/*
+
 pub fn save_image(img:RgbaImage){
     img.save("images/screenshot.jpg").unwrap();
 }
-*/
+
 
 pub fn get_square_image(full_screenshot:&RgbaImage, board_size:usize, square_x:u32, square_y:u32) -> RgbaImage {
     let x = match board_size {
