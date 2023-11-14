@@ -200,6 +200,37 @@ pub fn get_img_cell_pairs_l() -> Vec<ImgCellPair>{
     res
 }
 
+pub fn get_img_cell_pairs_x_prime() -> Vec<ImgCellPair>{
+    let mut res = Vec::new();
+
+    res.push(
+        ImgCellPair{img:image::open("images/empty.jpg").unwrap().into_rgba8(), cell:MinesweeperCell::Empty}
+    );
+    res.push(
+        ImgCellPair{img:image::open("images/mine.jpg").unwrap().into_rgba8(), cell:MinesweeperCell::Mine}
+    );
+    res.push(
+        ImgCellPair{img:image::open("images/0.jpg").unwrap().into_rgba8(), cell:MinesweeperCell::Number(0)}
+    );
+    res.push(
+        ImgCellPair{img:image::open("images/1.jpg").unwrap().into_rgba8(), cell:MinesweeperCell::Number(1)}
+    );
+    res.push(
+        ImgCellPair{img:image::open("images/2.jpg").unwrap().into_rgba8(), cell:MinesweeperCell::Number(2)}
+    );
+    res.push(
+        ImgCellPair{img:image::open("images/3.jpg").unwrap().into_rgba8(), cell:MinesweeperCell::Number(3)}
+    );
+    res.push(
+        ImgCellPair{img:image::open("images/question.jpg").unwrap().into_rgba8(), cell:MinesweeperCell::Question}
+    );
+    res.push(
+        ImgCellPair{img:image::open("images/4.jpg").unwrap().into_rgba8(), cell:MinesweeperCell::Number(4)}
+    );
+
+    res
+}
+
 pub fn get_img_cell_pairs_n() -> Vec<ImgCellPair>{
     let mut res = Vec::new();
 

@@ -1,12 +1,15 @@
 use crate::board_image_getter::{get_whole_window, get_square_image};
-use crate::image_to_square::{parse_cell, get_img_cell_pairs, get_img_cell_pairs_m, get_img_cell_pairs_l, get_img_cell_pairs_n};
+use crate::image_to_square::{parse_cell, get_img_cell_pairs, get_img_cell_pairs_m, get_img_cell_pairs_l, get_img_cell_pairs_n, get_img_cell_pairs_x_prime};
 use crate::board::{MinesweeperCell, Board};
 
+#[derive(Copy)]
+#[derive(Clone)]
 pub enum VisionType {
     Normal,
     ChessBig,
     UpToNine,
     ChessSmall,
+    UpToFour,
 }
 
 pub fn get_board(board_size:usize, vision_type:VisionType) -> Board{
@@ -26,6 +29,7 @@ pub fn get_board(board_size:usize, vision_type:VisionType) -> Board{
         VisionType::ChessBig => get_img_cell_pairs_m(),
         VisionType::UpToNine => get_img_cell_pairs_l(),
         VisionType::ChessSmall => get_img_cell_pairs_n(),
+        VisionType::UpToFour => get_img_cell_pairs_x_prime()
     };
 
     while y < board_size_u32{

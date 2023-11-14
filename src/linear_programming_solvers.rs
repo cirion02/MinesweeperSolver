@@ -11,6 +11,7 @@ use std::collections::{HashMap, HashSet};
 enum ConstraitType {
     Equality,
     Minimum,
+    Maximum,
     BlackWhiteEquality,
     OffByOne,
     DifferenceOfColors(f64),
@@ -46,6 +47,7 @@ impl fmt::Display for ConstraitType {
         match self {
             ConstraitType::Equality => write!(f, "=="),
             ConstraitType::Minimum => write!(f, ">="),
+            ConstraitType::Maximum => write!(f, "<="),
             ConstraitType::BlackWhiteEquality => write!(f, "M="),
             ConstraitType::OffByOne => write!(f, "L="),
             ConstraitType::DifferenceOfColors(_) => write!(f, "N="),
@@ -68,7 +70,7 @@ impl fmt::Display for ConstraintSet {
     }
 }
 
-fn combine_constraint_sets(set1:ConstraintSet, set2:ConstraintSet) -> ConstraintSet {
+pub fn combine_constraint_sets(set1:ConstraintSet, set2:ConstraintSet) -> ConstraintSet {
     ConstraintSet { 
         cells: set1.cells, 
         constraints: {
@@ -129,7 +131,7 @@ fn create_constraint_set_minecount(board:&Board) -> ConstraintSet{
     }
 }
 
-fn create_q_added_constraint_set(board:&Board) -> ConstraintSet{
+pub fn create_q_added_constraint_set(board:&Board) -> ConstraintSet{
     let (empty_cells, mines_placed) = board.empty_and_mine_count(&(0..board.size*board.size).collect());
 
     let mut constraints = vec![];
@@ -170,7 +172,7 @@ fn create_constraints_for_cell_m(id:usize, board:&Board) -> Vec<Constraint> {
     }
 }
 
-fn create_constraint_set_multiple_mines(board:&Board) -> ConstraintSet{
+pub fn create_constraint_set_multiple_mines(board:&Board) -> ConstraintSet{
     
     let (empty_cells, _) = board.empty_and_mine_count(&(0..board.size*board.size).collect());
 
@@ -205,7 +207,7 @@ fn create_constraints_for_cell_l(id:usize, board:&Board) -> Vec<Constraint> {
     }
 }
 
-fn create_constraint_set_liar_mines(board:&Board) -> ConstraintSet{
+pub fn create_constraint_set_liar_mines(board:&Board) -> ConstraintSet{
     
     let (empty_cells, _) = board.empty_and_mine_count(&(0..board.size*board.size).collect());
 
@@ -223,7 +225,7 @@ fn create_constraint_set_liar_mines(board:&Board) -> ConstraintSet{
 }
 
 
-fn create_constraint_set_minecount_b(board:&Board) -> ConstraintSet{
+pub fn create_constraint_set_minecount_b(board:&Board) -> ConstraintSet{
     let total_count:usize = match board.size{
         5 => 10,
         6 => 12,
@@ -243,7 +245,7 @@ fn create_constraint_set_minecount_b(board:&Board) -> ConstraintSet{
     }
 }
 
-fn create_b_added_constraint_set(board:&Board) -> ConstraintSet{
+pub fn create_b_added_constraint_set(board:&Board) -> ConstraintSet{
     let (empty_cells, mines_placed) = board.empty_and_mine_count(&(0..board.size*board.size).collect());
 
     let mines_per_row = match board.size {
@@ -287,7 +289,7 @@ fn create_constraints_for_cell_n(id:usize, board:&Board) -> Vec<Constraint> {
     }
 }
 
-fn create_constraint_set_negation_mines(board:&Board) -> ConstraintSet{
+pub fn create_constraint_set_negation_mines(board:&Board) -> ConstraintSet{
     
     let (empty_cells, _) = board.empty_and_mine_count(&(0..board.size*board.size).collect());
 
@@ -297,6 +299,117 @@ fn create_constraint_set_negation_mines(board:&Board) -> ConstraintSet{
                 |mut vec, id| 
                 {
                     vec.extend(create_constraints_for_cell_n(id, board));
+                    vec
+                }),
+        boardsize: board.size,
+        cells:empty_cells
+    }
+}
+
+fn create_constraints_for_cell_x(id:usize, board:&Board) -> Vec<Constraint> {
+    match board[id] {
+        MinesweeperCell::Number(x) => {
+            let next_to = board.get_next_to(id, NextToPolicy::XScape);
+            let (empty, bombs) = board.empty_and_mine_count(&next_to);
+            if empty.len() == 0 { return vec![] };
+            return vec![Constraint { constrait_type: ConstraitType::Equality, value: x - bombs, cells: empty, cells2: vec![] }];
+        },
+        _ => return vec![]
+    }
+}
+
+pub fn create_constraint_set_cross_mines(board:&Board) -> ConstraintSet{
+    
+    let (empty_cells, _) = board.empty_and_mine_count(&(0..board.size*board.size).collect());
+
+    ConstraintSet {
+        constraints:
+            (0..board.size*board.size).fold(vec![], 
+                |mut vec, id| 
+                {
+                    vec.extend(create_constraints_for_cell_x(id, board));
+                    vec
+                }),
+        boardsize: board.size,
+        cells:empty_cells
+    }
+}
+
+pub fn create_t_added_constraint_set(board:&Board) -> ConstraintSet{
+    let (empty_cells, mines_placed) = board.empty_and_mine_count(&(0..board.size*board.size).collect());
+
+
+    let mut constraints = vec![];
+
+    //Horizontal
+    for y in 0..board.size{
+        for x in 0..board.size-2{
+            let spaces = vec![y*board.size+x, y*board.size+x+1, y*board.size+x+2];
+            let (empty, mines) = board.empty_and_mine_count(&spaces);
+            if empty.len() + mines < 3 {continue};
+            constraints.push(Constraint { constrait_type: ConstraitType::Maximum, value: 2 - mines, cells: empty, cells2: vec![] });
+        }
+    }
+
+    //Vertical
+    for y in 0..board.size-2{
+        for x in 0..board.size{
+            let spaces = vec![y*board.size+x, (y+1)*board.size+x, (y+2)*board.size+x];
+            let (empty, mines) = board.empty_and_mine_count(&spaces);
+            if empty.len() + mines < 3 {continue};
+            constraints.push(Constraint { constrait_type: ConstraitType::Maximum, value: 2 - mines, cells: empty, cells2: vec![] });
+        }
+    }
+
+    //Top-left to Bottom-right
+    for y in 0..board.size-2{
+        for x in 0..board.size-2{
+            let spaces = vec![y*board.size+x, (y+1)*board.size+x+1, (y+2)*board.size+x+2];
+            let (empty, mines) = board.empty_and_mine_count(&spaces);
+            if empty.len() + mines < 3 {continue};
+            constraints.push(Constraint { constrait_type: ConstraitType::Maximum, value: 2 - mines, cells: empty, cells2: vec![] });
+        }
+    }
+
+    //Top-right to Bottom-left
+    for y in 0..board.size-2{
+        for x in 2..board.size{
+            let spaces = vec![y*board.size+x, (y+1)*board.size+x-1, (y+2)*board.size+x-2];
+            let (empty, mines) = board.empty_and_mine_count(&spaces);
+            if empty.len() + mines < 3 {continue};
+            constraints.push(Constraint { constrait_type: ConstraitType::Maximum, value: 2 - mines, cells: empty, cells2: vec![] });
+        }
+    }
+
+    ConstraintSet {
+        constraints:constraints,
+        boardsize: board.size,
+        cells:empty_cells
+    } 
+}
+
+fn create_constraints_for_cell_x_prime(id:usize, board:&Board) -> Vec<Constraint> {
+    match board[id] {
+        MinesweeperCell::Number(x) => {
+            let next_to = board.get_next_to(id, NextToPolicy::XSmall);
+            let (empty, bombs) = board.empty_and_mine_count(&next_to);
+            if empty.len() == 0 { return vec![] };
+            return vec![Constraint { constrait_type: ConstraitType::Equality, value: x - bombs, cells: empty, cells2: vec![] }];
+        },
+        _ => return vec![]
+    }
+}
+
+fn create_constraint_set_mini_cross_mines(board:&Board) -> ConstraintSet{
+    
+    let (empty_cells, _) = board.empty_and_mine_count(&(0..board.size*board.size).collect());
+
+    ConstraintSet {
+        constraints:
+            (0..board.size*board.size).fold(vec![], 
+                |mut vec, id| 
+                {
+                    vec.extend(create_constraints_for_cell_x_prime(id, board));
                     vec
                 }),
         boardsize: board.size,
@@ -328,6 +441,18 @@ pub fn create_constraint_set_n(board:&Board) -> ConstraintSet {
     combine_constraint_sets(create_constraint_set_minecount(board), create_constraint_set_negation_mines(board))
 }
 
+pub fn create_constraint_set_x(board:&Board) -> ConstraintSet {
+    combine_constraint_sets(create_constraint_set_minecount(board), create_constraint_set_cross_mines(board))
+}
+
+pub fn create_constraint_set_t(board:&Board) -> ConstraintSet {
+    combine_constraint_sets(create_constraint_set_v(board), create_t_added_constraint_set(board))
+}
+
+pub fn create_constraint_set_x_prime(board:&Board) -> ConstraintSet {
+    combine_constraint_sets(create_constraint_set_minecount(board), create_constraint_set_mini_cross_mines(board))
+}
+
 fn probe_cell(constraints:&ConstraintSet, probe_id:usize) -> ProbeResult{
     let mut lookup: HashMap<usize, usize> = HashMap::new();
     for i in 0..constraints.cells.len() {
@@ -350,6 +475,10 @@ fn probe_cell(constraints:&ConstraintSet, probe_id:usize) -> ProbeResult{
             ConstraitType::Minimum => {
                 let cells : Vec<(_, f64)> = constraint.cells.clone().into_iter().map(|id|(colums[*lookup.get(&id).unwrap()], 1.)).collect();
                 pb.add_row(value.., cells)
+            },
+            ConstraitType::Maximum => {
+                let cells : Vec<(_, f64)> = constraint.cells.clone().into_iter().map(|id|(colums[*lookup.get(&id).unwrap()], 1.)).collect();
+                pb.add_row(..=value, cells)
             },
             ConstraitType::BlackWhiteEquality => {
                 let mut cells : Vec<(_, f64)> = constraint.cells.clone().into_iter().map(|id|(colums[*lookup.get(&id).unwrap()], 1.)).collect();
@@ -397,8 +526,6 @@ fn probe_cell(constraints:&ConstraintSet, probe_id:usize) -> ProbeResult{
 
 pub fn find_known_squares(board:&Board, constaints_building:fn(&Board) -> ConstraintSet) -> KnownSquares{
     let s = constaints_building(&board);
-
-    println!("{}", s);
 
     let mut saves = HashSet::new();
     let mut mines = HashSet::new();

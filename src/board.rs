@@ -24,7 +24,8 @@ pub fn cell_to_char(cell:MinesweeperCell) -> char{
 
 pub enum NextToPolicy {
     EightAround,
-    XScape
+    XScape,
+    XSmall
 }
 
 pub trait BoardIndexable {
@@ -36,6 +37,8 @@ pub trait BoardIndexable {
 
     fn get_next_to_x(&self, index: usize) -> Vec<usize>;
 
+    fn get_next_to_x_small(&self, index: usize) -> Vec<usize>;
+
     fn empty_and_mine_count(&self, next_to:&Vec<usize>) -> (Vec<usize>, usize);
 
     fn black_white_m_minecount(&self, next_to:&Vec<usize>) -> (Vec<usize>, Vec<usize>, usize);
@@ -43,6 +46,7 @@ pub trait BoardIndexable {
     fn black_white_split_minecount(&self, next_to:&Vec<usize>) -> (Vec<usize>, Vec<usize>, usize, usize);
 }
 
+#[derive(Clone)]
 pub struct Board {
     pub rows : Vec<MinesweeperCell>,
     pub size : usize
@@ -56,7 +60,8 @@ impl BoardIndexable for Board {
     fn get_next_to(&self, index: usize, policy: NextToPolicy) -> Vec<usize>{
         match policy {
             NextToPolicy::EightAround => self.get_next_to_eight_around(index),
-            NextToPolicy::XScape => self.get_next_to_x(index)
+            NextToPolicy::XScape => self.get_next_to_x(index),
+            NextToPolicy::XSmall => self.get_next_to_x_small(index)
         }
     }
 
@@ -140,6 +145,34 @@ impl BoardIndexable for Board {
             if index+self.size < self.size * (self.size-1) {
                 res.push(index+self.size+self.size);
             }
+        }
+
+        res
+    }
+
+    fn get_next_to_x_small(&self, index: usize) -> Vec<usize> {
+        if index >= self.size * self.size{
+            panic!("index {} out of range for board", index)
+        }
+
+        let mut res = vec![];
+
+        let up = index >= self.size;
+        let down = index < self.size * (self.size-1);
+        let left = index % self.size != 0;
+        let right = (index+1) % self.size != 0;
+
+        if up {
+            res.push(index - self.size);
+        }
+        if right {
+            res.push(index+1);
+        }
+        if left {
+            res.push(index-1);
+        }
+        if down {
+            res.push(index + self.size);
         }
 
         res
